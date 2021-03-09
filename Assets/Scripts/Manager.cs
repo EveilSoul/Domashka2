@@ -4,6 +4,8 @@ using UnityEngine;
 
 public class Manager : MonoBehaviour
 {
+    public static string StartPath = @"C:\Users\BlackPirate\Desktop";
+
     public void Quit()
     {
         Debug.Log("Quit");

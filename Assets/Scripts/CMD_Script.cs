@@ -13,7 +13,7 @@ public class CMD_Script : MonoBehaviour
     public Text ResultText;
 
     public string CurrentPath;
-    public string StartPath = @"C:\Users\Ev\Documents\Новая папка";
+    public string StartPath => Manager.StartPath;
 
     private string currentText;
     private List<string> commandsHistory;
@@ -71,7 +71,17 @@ public class CMD_Script : MonoBehaviour
         }
         else if (com[0] == "cd")
         {
-            var path = GetPath(com[1]);
+            var path = "";
+            if (command.Contains('"'))
+            {
+                var spl = command.Split('"');
+                path = GetPath(spl[1]);
+            }
+            else
+            {
+                path = GetPath(com[1]);
+            }
+             
             if (PathExist(path))
             {
                 CurrentPath = path;
@@ -88,7 +98,7 @@ public class CMD_Script : MonoBehaviour
             var path = GetPath(com[com.Length - 1]);
             if (PathExist(path))
             {
-                MoveFiles(command, CurrentPath);
+                MoveFiles(command, path);
             }
             else
             {
@@ -113,6 +123,10 @@ public class CMD_Script : MonoBehaviour
                 splitedCommand = command.Split(' ');
             }
             var files = Directory.GetFiles(path, splitedCommand[1]);
+            foreach (var file in files)
+            {
+                File.Move(CurrentPath + '\\' + file, path);
+            }
             UpdateText(command, moveMessage + '\n' + GetFilesList(files, false, true));
         }
         else
@@ -133,6 +147,11 @@ public class CMD_Script : MonoBehaviour
             if (allExist)
             {
                 UpdateText(command, moveMessage);
+
+                foreach (var file in files)
+                {
+                    File.Move(CurrentPath + '\\' + file, path);
+                }
             }
             else
             {
@@ -268,7 +287,7 @@ public class CMD_Script : MonoBehaviour
                 sb.Append('\n');
             }
         }
-        if (sb.Length > 0)
+        if (sb.Length > 0 && !isDir)
             sb.Remove(sb.Length - 1, 1);
         return sb.ToString();
     }
