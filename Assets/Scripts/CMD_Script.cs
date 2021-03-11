@@ -19,9 +19,10 @@ public class CMD_Script : MonoBehaviour
     private List<string> commandsHistory;
     private int commandIndex;
     private string moveMessage = @"<color=#47FF8E><b>Файлы были успешно перемещены</b></color>";
-    private string errorPathMessage = @"<color=red><b>Заданный путь не существует</b></color>";
-    private string errorFileExistMessage = @"Данные файлы не существуют: ";
-    private string errorCommandExistMessage = @"Команда не распознана";
+    private string errorPathMessage = @"<color=red><b>Заданный путь не существует: </b></color>";
+    private string errorFileExistMessage = @"<color=red><b>Данные файлы не существуют: </b></color>";
+    private string errorFileAlreadyExistMessage = @"<color=red><b>Данные файлы уже существуют: </b></color>";
+    private string errorCommandExistMessage = @"<color=red><b>Команда не распознана</b></color>";
 
     public void OnEnable()
     {
@@ -63,7 +64,7 @@ public class CMD_Script : MonoBehaviour
         commandsHistory.Add(command);
         commandIndex = commandsHistory.Count - 1;
 
-        var com = command.Split(' ');
+        var com = SplitCommand(command);
         if (com[0] == "ls")
         {
             var files = GetFiles(CurrentPath);
@@ -71,17 +72,8 @@ public class CMD_Script : MonoBehaviour
         }
         else if (com[0] == "cd")
         {
-            var path = "";
-            if (command.Contains('"'))
-            {
-                var spl = command.Split('"');
-                path = GetPath(spl[1]);
-            }
-            else
-            {
-                path = GetPath(com[1]);
-            }
-             
+            var path = GetPath(com[1]);
+
             if (PathExist(path))
             {
                 CurrentPath = path;
@@ -90,48 +82,48 @@ public class CMD_Script : MonoBehaviour
             }
             else
             {
-                UpdateText(command, errorPathMessage);
+                UpdateText(command, errorPathMessage + path);
             }
         }
         else if (com[0] == "mv")
         {
-            var path = GetPath(com[com.Length - 1]);
+            var path = GetPath(com.Last());
             if (PathExist(path))
             {
-                MoveFiles(command, path);
+                MoveFiles(command, path, com);
             }
             else
             {
-                UpdateText(command, errorPathMessage);
+                UpdateText(command, errorPathMessage + path);
             }
-        }
-    }
-
-    public void MoveFiles(string command, string path)
-    {
-        List<string> allFiles = Directory.GetFiles(path).ToList().Select(e => e.Split('\\').Last()).ToList();
-
-        if (command.Contains('*') || command.Contains('?'))
-        {
-            string[] splitedCommand;
-            if (command.Contains('"'))
-            {
-                splitedCommand = command.Split('"');
-            }
-            else
-            {
-                splitedCommand = command.Split(' ');
-            }
-            var files = Directory.GetFiles(path, splitedCommand[1]);
-            foreach (var file in files)
-            {
-                File.Move(CurrentPath + '\\' + file, path);
-            }
-            UpdateText(command, moveMessage + '\n' + GetFilesList(files, false, true));
         }
         else
         {
-            var files = GetFilesFromCommand(command);
+            UpdateText(com[0], errorCommandExistMessage);
+        }
+    }
+
+    public void MoveFiles(string command, string path, List<string> splitedCommand)
+    {
+        List<string> allFiles = Directory.GetFiles(CurrentPath).ToList().Select(e => e.Split('\\').Last()).ToList();
+
+        if (splitedCommand.Count == 3 && splitedCommand[1].Contains('*') || splitedCommand[1].Contains('?'))
+        {
+            var files = Directory.GetFiles(path, splitedCommand[1]);
+
+            if (Explorer.TryMoveFiles(files.Select(x => CurrentPath + '\\' + x), path, out List<string> filesCannotMove))
+            {
+                UpdateText(command, moveMessage + '\n' + GetFilesList(files, false, true));
+            }
+            else
+            {
+                UpdateText(command, errorFileAlreadyExistMessage + GetStr(filesCannotMove));
+            }
+            
+        }
+        else
+        {
+            var files = splitedCommand.Skip(1).Take(splitedCommand.Count - 2);
 
             var allExist = true;
             var notExistFiles = new List<string>();
@@ -146,11 +138,13 @@ public class CMD_Script : MonoBehaviour
 
             if (allExist)
             {
-                UpdateText(command, moveMessage);
-
-                foreach (var file in files)
+                if (Explorer.TryMoveFiles(files.Select(x => CurrentPath + '\\' + x), path, out List<string> filesCannotMove))
                 {
-                    File.Move(CurrentPath + '\\' + file, path);
+                    UpdateText(command, moveMessage);
+                }
+                else
+                {
+                    UpdateText(command, errorFileAlreadyExistMessage + GetStr(filesCannotMove));
                 }
             }
             else
@@ -236,10 +230,35 @@ public class CMD_Script : MonoBehaviour
         {
             return CurrentPath;
         }
-        else 
+        else
         {
             return CurrentPath + '\\' + path;
         }
+    }
+
+    public List<string> SplitCommand(string command)
+    {
+        var res = new List<string>();
+        bool inQuote = false;
+        res.Add("");
+
+        foreach(var c in command)
+        {
+            if (c == ' ' && !inQuote)
+            {
+                res.Add("");
+            }
+            else if (c == '"')
+            {
+                inQuote = !inQuote;
+            }
+            else
+            {
+                res[res.Count - 1] += c;
+            }
+        }
+
+        return res;
     }
 
     public void UpdateText(string command, string text)

@@ -15,6 +15,7 @@ public class Explorer : MonoBehaviour
     public string StartPath => Manager.StartPath;
 
     public GameObject ErrorMessage;
+    public GameObject SuccessMessage;
     public GameObject FileMenu;
     public Button CutButton;
     public Button PasteButton;
@@ -85,7 +86,7 @@ public class Explorer : MonoBehaviour
         catch (UnauthorizedAccessException e)
         {
             instance.currentPath = prevPath;
-            instance.ShowWrongPath();
+            instance.ShowError("Ошибка доступа", "Нет доступа к выбранному каталогу");
             instance.Restart();
         }
     }
@@ -139,21 +140,63 @@ public class Explorer : MonoBehaviour
 
     public void OnPasteButtonClick()
     {
+        if (!TryMoveFiles(filesToMove, currentPath, out List<string> filesCannotMove))
+        {
+            ShowError("ОШИБКА ПЕРЕМЕЩЕНИЯ",
+                "Невозможно выполнить операцию\n" +
+                "В данной директории уже есть следующие файлы:\n",
+                filesCannotMove.ToArray());
+            FileMenu.SetActive(false);
+            return;
+        }
+
         FileMenu.SetActive(false);
         PasteButton.interactable = false;
         CutButton.interactable = false;
 
 
-        foreach(var file in filesToMove)
-        {
-            var name = file.Split('\\').Last();
-            File.Move(file, currentPath + '\\' + name);
-        }
-
         ClearFilesToMove();
         ClearSelectedFiles();
 
         Restart();
+
+        ShowSuccess();
+    }
+
+    private void ShowSuccess()
+    {
+        SuccessMessage.SetActive(true);
+    }
+
+    /// <summary>
+    /// Пытается переместить файлы из списка
+    /// Если существует такой же файл в каталоге, перемещение не будет выполнено
+    /// </summary>
+    /// <param name="filesToMove">список файлов с абсолютным значением пути</param>
+    /// <param name="destFolder">абсолютный путь к папке, куда перемещаем</param>
+    /// <param name="filesCannotMove">список имен файлов, которые вызывают ошибку перемещения</param>
+    /// <returns>успешность или неуспешность опреации</returns>
+    public static bool TryMoveFiles(IEnumerable<string> filesToMove, string destFolder, out List<string> filesCannotMove)
+    {
+        Func<string, string> GetPath = name => destFolder + '\\' + name;
+
+        filesCannotMove = new List<string>();
+        foreach (var file in filesToMove)
+        {
+            var name = file.Split('\\').Last();
+            if (File.Exists(GetPath(name)))
+                filesCannotMove.Add(name);
+        }
+
+        if (filesCannotMove.Count > 0)
+            return false;
+
+        foreach (var file in filesToMove)
+        {
+            var name = file.Split('\\').Last();
+            File.Move(file, GetPath(name));
+        }
+        return true;
     }
 
     private void AddFileToSelected(GameObject file)
@@ -182,9 +225,19 @@ public class Explorer : MonoBehaviour
         selectedFiles = new List<GameObject>();
     }
 
-    private void ShowWrongPath()
+    private void ShowError(string errorName, string errorMessage, params string[] errors)
     {
         ErrorMessage.SetActive(true);
+        var allText = ErrorMessage.GetComponentsInChildren<Text>();
+        allText.First(x => x.name == "Label").text = errorName;
+        Text msg = allText.First(x => x.name == "Message");
+        msg.text = errorMessage;
+        if (errors != null && errors.Length > 0)
+        {
+            if (errors.Length > 1)
+                msg.text += "\n" + errors.Aggregate((x, y) => $"{y}, {x}");
+            else msg.text += "\n" + errors[0];
+        }
     }
 
     public void OnStartScrolling()
@@ -224,6 +277,9 @@ public class Explorer : MonoBehaviour
                 prefab = ImageIcon;
             var obj = Instantiate(prefab, Files.transform);
             obj.GetComponentInChildren<Text>().text = name;
+
+            if (filesToMove != null && filesToMove.Contains(file))
+                obj.GetComponentsInChildren<Image>().First(i => i.gameObject.name == "Cut").enabled = true;
         }
     }
 
